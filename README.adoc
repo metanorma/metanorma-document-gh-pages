@@ -107,7 +107,7 @@ travis login --com --github-token $GITHUB_TOKEN
 ----
 # You may need to add either `--com`, `--org` or `--pro` depending
 # on the location of your repository on Travis CI
-travis encrypt-file deploy_key
+travis encrypt-file deploy_key --com
 ----
 
 ** If the command gives output like `The repository at {github-org}/{repo} was not found`, you may have to manually adjust `.git/config`'s `[travis]` section to have `slug` point to the name of your repository's identifier on Travis CI.
