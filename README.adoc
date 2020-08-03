@@ -1,5 +1,5 @@
 
-= Metanorma document setup sample: Automatic deploys to GitHub Pages using Travis CI
+= Metanorma document setup sample: Automatic deploys to GitHub Pages using GitHub Actions
 
 == Introduction
 
@@ -13,6 +13,8 @@ repository to achieve:
 
 . Generate a public/private keypair using `ssh-keygen` (see <<keygen>>)
 
+. Define `GH_DEPLOY_KEY` as deployment key in GitHub repository settings
+
 . Copy the necessary files to your own Metanorma document repository.
 
 
@@ -21,7 +23,7 @@ repository to achieve:
 `metanorma.yml`:: The configuration file used to
   control execution behavior. You might want to set the following
   variables:
-`metanorma.deploy.email`::: the email that makes the commit to `gh-pages`; set to `travis-ci@metanorma.org` by default.
+`metanorma.deploy.email`::: the email that makes the commit to `gh-pages`; set to `ci@metanorma.org` by default.
 `relaton`::: you will need to set these if you are deploying a
 document collection. Specifically, set these: +
 +
@@ -37,12 +39,12 @@ relaton:
 ... build the document (`make clean`, `make all`); and
 ... setup and move artifacts into the `published/` directory for deployment (`make publish`).
 
-`.travis.yml`:: provides the necessary steps for Travis CI to:
+`.github/workflows/docker.yml`:: GitHub Actions configuration file which provides the dedicated job called `deploy-gh-pages` for GitHub Pages deployment on master update
 ... build the document via `make`; and
-... deploy the document using the `deploy-to-gh-pages.sh` script from
-  https://github.com/metanorma/metanorma-build-scripts[metanorma-build-scripts];
+... deploy the document using the `peaceiris/actions-gh-pages@v3` action from
+  https://github.com/marketplace/actions/github-pages-action];
 
-`deploy-to-gh-pages.sh`:: is an executable script referenced in `.travis.yml`
+`peaceiris/actions-gh-pages@v3`:: is an action referenced in `.github/workflows/docker.yml`
   used to upload published artifacts to GitHub pages automatically:
 ... decrypting the GitHub per-repository deploy key used to push the compiled output to the GitHub repository itself;
 ... pushing the "`published`" files (created in the `published/` directory by `make publish`) to the GitHub repository's `gh-pages` branch.
@@ -59,7 +61,7 @@ the files provided.
 
 * `Makefile`
 
-* `.travis.yml`
+* `.github/workflows/docker.yml`
 
 NOTE: Please don't change the file contents unless you know what you're doing.
 
@@ -70,30 +72,17 @@ NOTE: Please don't change the file contents unless you know what you're doing.
 cd {my-metanorma-document-repository}
 curl https://raw.githubusercontent.com/metanorma/metanorma-cli/master/templates/base/metanorma.yml --output metanorma.yml
 curl https://raw.githubusercontent.com/metanorma/metanorma-cli/master/templates/base/Makefile --output Makefile
-curl https://raw.githubusercontent.com/metanorma/metanorma-cli/master/templates/base/.travis.yml --output .travis.yml
+curl https://raw.githubusercontent.com/metanorma/metanorma-cli/master/templates/base/.github/workflows/docker.yml --output .github/workflows/docker.yml --create-dirs
 ----
 +
 NOTE: See the example from https://github.com/CalConnect/csd-vpoll[CalConnect's VPOLL document].
-
-
-. If you use a SINGLE REPO FOR MULTIPLE DOCUMENTS: +
-+
-[source,sh]
-----
-cd {my-metanorma-document-repository}
-curl https://raw.githubusercontent.com/metanorma/metanorma-cli/master/templates/base-collection/metanorma.yml --output metanorma.yml
-curl https://raw.githubusercontent.com/metanorma/metanorma-cli/master/templates/base-collection/Makefile --output Makefile
-curl https://raw.githubusercontent.com/metanorma/metanorma-cli/master/templates/base/.travis.yml --output .travis.yml
-----
-+
-NOTE: See the example from https://github.com/metanorma/mn-itu-docs[Metanorma ITU-T samples].
 
 And commit these files:
 
 [source,sh]
 ----
-git add metanorma.yml Makefile .travis.yml
-git commit -m 'Setup deploy scripts and variables for Travis'
+git add metanorma.yml Makefile .github/workflows/docker.yml
+git commit -m 'Setup deploy scripts and variables for GitHub Actions'
 git push
 ----
 
@@ -105,7 +94,7 @@ git push
 +
 [source,sh]
 ----
-export DEPLOY_EMAIL=travis-ci@metanorma.org
+export DEPLOY_EMAIL=ci@metanorma.org
 ssh-keygen -t rsa -b 4096 -N '' -C "${DEPLOY_EMAIL}" -f ./deploy_key
 ----
 +
@@ -115,108 +104,9 @@ The public key of the deploy key will be located at `./deploy_key.pub`
 
 . Click "`Add deploy key`"
 
-.. Title: "`Travis deployment to gh-pages`"
+.. Title: "`GitHub Actions deployment to gh-pages`"
 .. Key: copy and paste the content from `./deploy_key.pub`
 .. Tick "`Allow write access`" to allow this key to push to the `gh-pages` branch
-
-
-=== Make Travis CI encrypt the deploy key
-
-. Install the Travis CI gem (you must have Ruby installed):
-+
-[source,sh]
-----
-gem install travis
-----
-
-. Login to Travis CI:
-+
-[source,sh]
-----
-export GITHUB_TOKEN=foobar
-# You may need to add either `--com`, `--org` or `--pro` depending
-# on the location of your repository on Travis CI
-travis login --com --github-token $GITHUB_TOKEN
-----
-
-. (IMPORTANT) Manually go to Travis CI to "`Activate`" the repository.
-  This must be done before all steps that follow.
-
-. Encrypt the private portion of the deploy key (`./deploy_key`):
-+
-[source,sh]
-----
-# You may need to add either `--com`, `--org` or `--pro` depending
-# on the location of your repository on Travis CI
-travis encrypt-file deploy_key --com
-----
-
-** If the command gives output like
-  `The repository at {github-org}/{repo} was not found`,
-  you may have to manually adjust `.git/config`'s `[travis]`
-  section to have `slug` point to the name of your repository's
-  identifier on Travis CI.
-
-** Note: this ID is case-sensitive and also sensitive to trailing slashes!
-
-. A file called `./deploy_key.enc` will be created by Travis CI, and
-  you will see output like the following:
-+
-[source,sh]
-----
-encrypting deploy_key for {github-org}/{repo}
-storing result as deploy_key.enc
-DANGER ZONE: Override existing deploy_key.enc? |no| yes
-storing secure env variables for decryption
-
-Please add the following to your build script (before_install stage in your .travis.yml, for instance):
-
-    openssl aes-256-cbc -K $encrypted_ee73481fab12_key -iv $encrypted_ee73481fab12_iv -in deploy_key.enc -out deploy_key -d
-
-Pro Tip: You can add it automatically by running with --add.
-
-Make sure to add deploy_key.enc to the git repository.
-Make sure not to add deploy_key to the git repository.
-Commit all changes to your .travis.yml.
-----
-+
-Now, make sure you check your Travis CI job page that
-these two variables (`encrypted_ee73481fab12_key` and `encrypted_ee73481fab12_iv`)
-are really added to the page.
-This can be seen on the `https://travis-ci.com/{gh-org}/{gh-reponame}/settings` page.
-If it isn't there, you might need to toy with the
-`--com` or `--org` flags for Travis when running `travis encrypt`.
-Running the `travis encrypt` command multiple times is acceptable
-as long as you upload the latest `deploy_key.enc` file.
-
-
-NOTE: Previously it was necessary to obtain the particular "`encryption file ID`"
-for deployment; now the new `deploy-to-gh-pages.sh` script automatically retrieves
-the ID for you during deployment.
-
-
-=== Upload the encrypted deploy key
-
-. Add the encrypted deploy key `deploy_key.enc` into the Git repo:
-+
-[source,sh]
-----
-git add deploy_key.enc
-git commit -m 'Add encrypted deploy key'
-git push
-----
-
-Remember to add the file to Git.
-
-
-=== Make sure the deploy private key is ignored by Git
-
-Add `deploy_key` to `.gitignore`.
-
-[source,sh]
-----
-echo "\ndeploy_key\n" >> .gitignore
-----
 
 
 === Done and profit!
@@ -225,9 +115,5 @@ Yay!
 
 
 == Credits
-
-The method of deployment using GitHub tokens is inspired by:
-
-* https://github.com/w3c/permissions/blob/master/.travis.yml
 
 The https://www.metanorma.org[Metanorma project] from https://open.ribose.com[Ribose Open].
